@@ -2,9 +2,6 @@ from flask import Flask, request, send_from_directory
 import base64
 import time
 import os
-
-from keras.applications.vgg16 import VGG16
-from keras.layers import merge, Input
 import numpy as np
 import os
 from pathlib import Path
@@ -12,17 +9,27 @@ import csv
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import time
-from keras.applications.imagenet_utils import preprocess_input
-from keras.layers import Dense, Activation, Flatten
-from keras.layers import merge, Input
-from keras.models import Model
-from keras.utils import np_utils
+from keras.models import load_model
 import cv2
 import keras
 # set the "static" directory as the static folder.
 # this will ensure that all the static files are under one folder
-app = Flask(__name__, static_url_path='/static')
+app = Flask(__name__)
+modle = None
 
+def load():
+    # load the pre-trained Keras model (here we are using a model
+    # pre-trained on ImageNet and provided by Keras, but you can
+    # substitute in your own networks just as easily)
+    global model
+    model = load_model("model.h5")
+
+def prepare_image(image):
+    image = cv2.resize(image, (224, 224))
+    #image = image.reshape(1,150528)
+    image = np.reshape(image, (1,224, 224, 3))
+    return image
+    
 
 @app.route('/image', methods=['POST'])
 def upload_file():
@@ -37,11 +44,11 @@ def upload_file():
         if not os.path.exists("images"):
             os.mkdir("images")
         tstamp = str(time.time())
-        file.save("images//" + image_name+"_"+tstamp + ".jpg")
-        image=mpimg.imread("images//" + image_name+"_"+tstamp + ".jpg")
-        image = cv2.resize(image, (224, 224))
-        #image = image.reshape(1,150528)
-        image = np.reshape(image, (1,224, 224, 3))
+        print("images//" + image_name+"_"+tstamp + ".jpg")
+        file.save("images//" + image_name + ".jpg")
+        
+        image = mpimg.imread("images//" + image_name+".jpg")
+        image = prepare_image(image)
         img_class = model.predict(image)
         image_class = np.argmax(img_class, axis=1)
 
@@ -51,21 +58,8 @@ def upload_file():
     return "Success Image Class --> "+str(image_class), 200
 
 
-def load_model():
-    image_input = Input(shape=(224, 224, 3))
-    model = VGG16(input_tensor=image_input, include_top=True,weights='imagenet')
-
-    for layer in model.layers[:-1]:
-        layer.trainable = False
-    num_classes = 38
-
-    last_layer = model.get_layer('fc2').output
-    out = Dense(39, activation='softmax', name='output')(last_layer)
-    custom_vgg_model2 = Model(image_input, out)
-    custom_vgg_model2.load_weights("model.h5")
-
-    return custom_vgg_model2
-
 if __name__ == "__main__":
-    model = load_model()
-    app.run(host='192.168.1.219', port=5005, debug=True)
+    print(("* Loading Keras model and Flask starting server..."
+        "please wait until server has fully started"))
+    load()
+    app.run(host='localhost', port=5005, debug=True)
